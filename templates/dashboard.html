@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLC Log Analysis Results</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* --- FIX ---
+         * The AI summary box is now ALWAYS light blue with a blue border.
+         * I have removed the ".dark .ai-summary-box" rule
+         * This forces a light background, as you requested.
+        */
+        .ai-summary-box {
+            background-color: #f0f9ff; /* Always light blue */
+            border-left: 4px solid #3b82f6;
+            padding: 1.25rem; border-radius: 0.5rem;
+        }
+        
+        /* Simple loading spinner for the AI box */
+        .ai-spinner {
+            border: 2px solid #e5e7eb; /* gray-200 */
+            border-top-color: #3b82f6; /* blue-500 */
+            border-radius: 50%;
+            width: 1.25rem;
+            height: 1.25rem;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-200 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-6 flex justify-between items-center">
+            <h1 class="text-3xl font-bold text-blue-600 dark:text-blue-400">Analysis Complete</h1>
+            <a href="/" class="text-blue-600 dark:text-blue-400 hover:underline">&larr; Analyze New Files</a>
+        </header>
+
+        <div class="mb-6">
+            <h2 class="text-2xl font-bold mb-3">🧠 AI Maintenance Analysis</h2>
+            <div class="ai-summary-box shadow-sm">
+                <div id="ai-content-area">
+                    <p id="ai-placeholder" class="text-gray-600 dark:text-gray-600">Click the button to generate a detailed analysis of the data.</p>
+                    <pre id="ai-summary-content" class="whitespace-pre-wrap font-sans text-base text-gray-800 dark:text-gray-800 hidden"></pre>
+                </div>
+                <button id="generate-ai-button" class="mt-4 bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition duration-300 disabled:opacity-50">
+                    Generate Detailed Analysis
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Files Processed</h3>
+                <p class="text-3xl font-bold mt-2">{{ data.stats.files_processed }}</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Total Log Entries</h3>
+                <p class="text-3xl font-bold mt-2">{{ "{:,.0f}".format(data.stats.total_entries) }}</p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Total Active Alarms (K_)</h3>
+                <p class="text-3xl font-bold mt-2 text-red-500">{{ "{:,.0f}".format(data.stats.total_active_alarms) }}</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4">Top 10 Most Frequent Alarms</h3>
+                <div class="relative w-full h-96">
+                    <canvas id="topAlarmsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4">Top 10 Failing Components</h3>
+                <div class="relative w-full h-96">
+                    <canvas id="topComponentsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4">Network Instability by Logger</h3>
+                <div class="relative w-full h-96">
+                    <canvas id="connectionIssuesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4">Alarm Frequency (per 5 min)</h3>
+                <div class="relative w-full h-96">
+                    <canvas id="errorsOverTimeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Get Data from Flask ---
+        const analysisData = {{ data | tojson }};
+
+        // --- 2. Chart Rendering Functions (Unchanged) ---
+        const chartInstances = {};
+        function renderChart(canvasId, type, data, label, color, isHorizontal = false) {
+            if (!data) {
+                console.error(`No data provided for chart: ${canvasId}`);
+                return;
+            }
+            if (chartInstances[canvasId]) {
+                chartInstances[canvasId].destroy();
+            }
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            const labels = Object.keys(data);
+            const values = Object.values(data);
+            
+            const config = {
+                type: type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: values,
+                        backgroundColor: color + '99',
+                        borderColor: color,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                        y: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' }, beginAtZero: true }
+                    }
+                }
+            };
+            if (isHorizontal) config.options.indexAxis = 'y';
+            chartInstances[canvasId] = new Chart(ctx, config);
+        }
+        
+        function renderLineChart(canvasId, data, label, color) {
+            if (!data || !data.labels || !data.counts) {
+                console.error(`Invalid line chart data for: ${canvasId}`);
+                return;
+            }
+            if (chartInstances[canvasId]) {
+                chartInstances[canvasId].destroy();
+            }
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            chartInstances[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: label,
+                        data: data.counts,
+                        backgroundColor: color + '99',
+                        borderColor: color,
+                        fill: false,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                        y: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // --- 3. Asynchronous AI Summary Fetch (READABILITY FIX) ---
+        async function fetchAiSummary() {
+            const aiButton = document.getElementById('generate-ai-button');
+            const aiPlaceholder = document.getElementById('ai-placeholder');
+            const aiContent = document.getElementById('ai-summary-content');
+            const aiContentArea = document.getElementById('ai-content-area');
+
+            // Show loading state
+            aiPlaceholder.classList.add('hidden');
+            aiContent.classList.add('hidden');
+            
+            // --- FIX: Changed text to dark gray (text-gray-600) to be readable on light bg ---
+            aiContentArea.innerHTML = `
+                <div class="flex items-center">
+                    <div class="ai-spinner mr-3"></div>
+                    <p class="text-gray-600 dark:text-gray-600">Generating AI analysis... This may take a moment.</p>
+                </div>
+            `;
+            aiButton.disabled = true;
+
+            try {
+                const response = await fetch('/get_summary', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(analysisData) 
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                // --- FIX: Changed text to dark gray (text-gray-800) to be readable on light bg ---
+                aiContentArea.innerHTML = `<pre id="ai-summary-content" class="whitespace-pre-wrap font-sans text-base text-gray-800 dark:text-gray-800"></pre>`;
+                document.getElementById('ai-summary-content').textContent = result.summary;
+
+            } catch (error) {
+                console.error("Failed to fetch AI summary:", error);
+                // --- FIX: Changed text to dark red (text-red-600) to be readable on light bg ---
+                aiContentArea.innerHTML = `<p class="text-red-600 dark:text-red-600">Error: Could not load AI summary. ${error.message}</p>`;
+            } finally {
+                // Re-enable the button, but change its text
+                aiButton.disabled = false;
+                aiButton.textContent = "Re-generate Analysis";
+            }
+        }
+
+        // --- 4. Render All Charts (Fast) & Add Button Click (Unchanged) ---
+        window.addEventListener('load', () => {
+            // Render all charts immediately
+            renderChart('topAlarmsChart', 'bar', analysisData.top_alarms, 'Alarm Count', '#ef4444');
+            renderChart('topComponentsChart', 'bar', analysisData.top_components, 'Failure Count', '#3b82f6', true);
+            renderChart('connectionIssuesChart', 'bar', analysisData.connection_issues_by_logger, 'Disconnects/Timeouts', '#f97316');
+            renderLineChart('errorsOverTimeChart', analysisData.errors_over_time, 'Alarm Frequency', '#eab308');
+            
+            // Add click listener to the new button
+            const aiButton = document.getElementById('generate-ai-button');
+            aiButton.addEventListener('click', fetchAiSummary);
+        });
+    </script>
+</body>
+</html>

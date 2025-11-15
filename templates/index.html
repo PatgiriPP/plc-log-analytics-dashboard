@@ -1,0 +1,121 @@
+
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload PLC Logs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        #drop-zone { border: 2px dashed #9ca3af; transition: all 0.3s ease; }
+        #drop-zone.drag-over { border-color: #3b82f6; background-color: #f0f9ff; }
+        .dark #drop-zone.drag-over { background-color: #1f2937; }
+        .spinner {
+            border-top-color: #3b82f6;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-200 min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-2xl w-full bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-blue-600 dark:text-blue-400">PLC Log Analytics Dashboard</h1>
+            <p class="text-lg text-gray-600 dark:text-gray-400 mt-2">Upload your log files (.txt or .csv) to begin.</p>
+        </header>
+
+        <!-- Upload Form -->
+        <form id="upload-form" action="/analyze" method="post" enctype="multipart/form-data">
+            <div id="drop-zone" class="flex flex-col items-center justify-center p-10 rounded-lg text-center cursor-pointer">
+                <svg class="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V6a2 2 0 012-2h10a2 2 0 012 2v6a4 4 0 01-4 4H7zM10 9v6m-3-3h6"></path></svg>
+                <p class="font-semibold">Drag & drop files here</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">or click to select</p>
+                <input type="file" id="file-input" name="log_files" class="hidden" multiple accept=".txt,.csv">
+            </div>
+            
+            <div id="file-list-container" class="mt-4 hidden">
+                <h3 class="font-semibold text-lg">Selected Files:</h3>
+                <ul id="file-list" class="list-disc list-inside mt-2 text-gray-600 dark:text-gray-400"></ul>
+            </div>
+
+            <button type="submit" id="analyze-button" disabled
+                class="w-full mt-6 bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow hover:bg-blue-700 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                Analyze Files
+            </button>
+        </form>
+
+        <!-- Loading State -->
+        <div id="loading-state" class="hidden flex-col items-center justify-center p-10">
+            <div class="spinner border-4 border-gray-200 rounded-full"></div>
+            <p class="mt-4 text-lg font-semibold">Processing files and generating AI summary...</p>
+            <p class="text-gray-500 dark:text-gray-400">Please wait, this may take a moment.</p>
+        </div>
+        
+        <!-- Error State -->
+        <div id="error-message" class="hidden mt-4 p-4 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 rounded-lg">
+            <!-- Error content goes here -->
+        </div>
+
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileListContainer = document.getElementById('file-list-container');
+        const fileList = document.getElementById('file-list');
+        const analyzeButton = document.getElementById('analyze-button');
+        const uploadForm = document.getElementById('upload-form');
+        const loadingState = document.getElementById('loading-state');
+        const errorMessage = document.getElementById('error-message');
+
+        // --- Drag & Drop Handlers ---
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            fileInput.files = e.dataTransfer.files; // Assign dropped files to input
+            updateFileList();
+        });
+        fileInput.addEventListener('change', updateFileList);
+
+        function updateFileList() {
+            fileList.innerHTML = ''; // Clear list
+            if (fileInput.files.length > 0) {
+                Array.from(fileInput.files).forEach(file => {
+                    const li = document.createElement('li');
+                    li.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                    fileList.appendChild(li);
+                });
+                fileListContainer.classList.remove('hidden');
+                analyzeButton.disabled = false;
+            } else {
+                fileListContainer.classList.add('hidden');
+                analyzeButton.disabled = true;
+            }
+        }
+
+        // --- Form Submission Handler ---
+        uploadForm.addEventListener('submit', function(e) {
+            // Show loading state, hide form
+            uploadForm.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            errorMessage.classList.add('hidden');
+            
+            // Note: The form will now submit to the Flask backend.
+            // If we were doing a pure JS single-page-app, we would
+            // e.preventDefault() and use fetch() here.
+            // But for Flask rendering a new page, this is correct.
+        });
+
+    </script>
+</body>
+</html>

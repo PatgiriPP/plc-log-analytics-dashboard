@@ -1,0 +1,13 @@
+# --- Python Virtual Environments ---
+venv/
+.venv/
+*.pyc
+__pycache__/
+
+# --- API Keys and Environment Variables ---
+.env
+.env.*
+
+# --- IDE / OS Files ---
+.vscode/
+.DS_Store
