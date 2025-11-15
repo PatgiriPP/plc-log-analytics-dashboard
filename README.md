@@ -1,6 +1,5 @@
 PLC Log Analytics Dashboard (with AI Summary)
 
-(Python 3.9+)
 
 This is a Flask web application designed to help maintenance teams and plant managers analyze complex PLC (Programmable Logic Controller) log files.
 
